@@ -87,18 +87,25 @@ const updatePlayerFromOpenDota = async (steam_id) => {
   const accountId = accountIdFromSteamId(steam_id);
   if (!accountId) return null;
   try {
-    // Fetch Profile & Recent Matches in parallel
-    // Use catch on BOTH to allow partial updates or just keeping old data
-    const [profileRes, matchesRes] = await Promise.all([
-      axios.get(`https://api.opendota.com/api/players/${accountId}`).catch(e => {
-        console.error(`Error fetching profile for ${steam_id}:`, e.message);
-        return { data: {} };
-      }),
-      axios.get(`https://api.opendota.com/api/players/${accountId}/recentMatches`).catch(e => {
-        console.error(`Error fetching matches for ${steam_id}:`, e.message);
-        return { data: [] };
-      })
-    ]);
+    // Fetch Profile & Recent Matches sequentially to avoid rate limits
+    let profileRes = { data: {} };
+    let matchesRes = { data: [] };
+
+    try {
+      profileRes = await axios.get(`https://api.opendota.com/api/players/${accountId}`);
+    } catch (e) {
+      console.error(`Error fetching profile for ${steam_id}:`, e.message);
+      if (e.response?.status === 429) return { error: 'RATE_LIMIT' };
+    }
+
+    await delay(1500); // Wait 1.5s between requests
+
+    try {
+      matchesRes = await axios.get(`https://api.opendota.com/api/players/${accountId}/recentMatches`);
+    } catch (e) {
+      console.error(`Error fetching matches for ${steam_id}:`, e.message);
+      if (e.response?.status === 429) return { error: 'RATE_LIMIT' };
+    }
 
     const data = profileRes.data || {};
     const matches = matchesRes.data || [];
@@ -169,10 +176,11 @@ const updatePlayerFromOpenDota = async (steam_id) => {
           if (region !== undefined && REGION_NAMES[region]) {
             regionCounts[region] = (regionCounts[region] || 0) + 1;
           }
-          // Small delay to avoid bursting too hard
-          await delay(300);
+          // Delay to avoid bursting
+          await delay(1500);
         } catch (err) {
           console.error(`Error fetching match ${m.match_id}:`, err.message);
+          if (err.response?.status === 429) return { error: 'RATE_LIMIT' };
         }
       }
 
@@ -242,8 +250,15 @@ const updateAllPlayersFromOpenDota = async () => {
     for (const p of players) {
       try {
         const result = await updatePlayerFromOpenDota(p.steam_id);
-        // Emit individual player update
-        websocketService.broadcast({ type: 'PLAYER_UPDATE', data: result });
+        
+        if (result && result.error === 'RATE_LIMIT') {
+          console.warn(`Rate limit hit for ${p.steam_id}. Pausing for 60s...`);
+          syncState.errors++;
+          await delay(60000);
+        } else {
+          // Emit individual player update
+          websocketService.broadcast({ type: 'PLAYER_UPDATE', data: result });
+        }
       } catch (e) {
         syncState.errors++;
       }
@@ -255,7 +270,8 @@ const updateAllPlayersFromOpenDota = async () => {
       // Delay to respect rate limits (OpenDota free tier ~60/min)
       // We make multiple requests per player now (profile + recentMatches + ~3 matches)
       // ~5 requests per player -> 12 players/min -> 5000ms delay
-      await delay(5000);
+      // Increased to 6000ms to be safe
+      await delay(6000);
     }
     syncState.running = false;
     websocketService.broadcastAdmin({ type: 'SYNC_COMPLETE', data: syncState });
