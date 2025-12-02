@@ -66,15 +66,15 @@ const updateAllPlayersFromOpenDota = async () => {
       }
       syncState.processed++;
       
-      // Emit progress update
-      websocketService.broadcast({ type: 'SYNC_PROGRESS', data: syncState });
+      // Emit progress update ONLY to admins
+      websocketService.broadcastAdmin({ type: 'SYNC_PROGRESS', data: syncState });
 
       // Delay to respect rate limits (OpenDota free tier ~60/min)
       // 1500ms = ~40 req/min (safe)
       await delay(1500);
     }
     syncState.running = false;
-    websocketService.broadcast({ type: 'SYNC_COMPLETE', data: syncState });
+    websocketService.broadcastAdmin({ type: 'SYNC_COMPLETE', data: syncState });
   })();
 
   return syncState;
