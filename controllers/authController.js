@@ -28,7 +28,7 @@ const steamCallback = (req, res) => {
   const token = jwt.sign({ steam_id: req.user.steam_id, role: 'player' }, JWT_SECRET, { expiresIn: '7d' });
 
   // Redirect to frontend with token
-  res.redirect(`${process.env.FRONTEND_URL}/rankdota/auth/callback?token=${token}`);
+  res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}`);
 };
 
 module.exports = { login, steamCallback };
