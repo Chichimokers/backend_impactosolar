@@ -1,7 +1,4 @@
 node_modules/
-.env
-.env.local
-.env.prod
 steam_friends.db
 steam_friends.db-journal
 data/
