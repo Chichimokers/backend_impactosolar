@@ -164,6 +164,7 @@ const updatePlayerFromOpenDota = async (steam_id) => {
         try {
           const matchDetail = await axios.get(`https://api.opendota.com/api/matches/${m.match_id}`);
           const region = matchDetail.data?.region;
+          console.log(`Match ${m.match_id} region:`, region);
           // Validate that it is a known region (and not a cluster ID or garbage)
           if (region !== undefined && REGION_NAMES[region]) {
             regionCounts[region] = (regionCounts[region] || 0) + 1;
@@ -180,6 +181,14 @@ const updatePlayerFromOpenDota = async (steam_id) => {
       }
     }
 
+    // If we have a valid region_cluster, we use it.
+    // If we don't (it's null), we might want to keep the old one OR clear it if it's invalid.
+    // But playerModel uses COALESCE, so nulls are ignored.
+    // To fix the "122" issue, we need to ensure that if we successfully checked matches and found NO valid region,
+    // we don't just send null if we want to overwrite bad data.
+    // However, without knowing the current DB state, we can't selectively overwrite.
+    // The best approach is: if we have matches but no valid region, maybe the player hasn't played in valid regions recently.
+    
     const nuevaInfo = {
       mmr_estimate: mmr,
       rank_tier: data.rank_tier ?? null,
@@ -193,6 +202,11 @@ const updatePlayerFromOpenDota = async (steam_id) => {
       most_played_hero_id: most_played_hero_id ? parseInt(most_played_hero_id) : null,
       region_cluster: region_cluster ? parseInt(region_cluster) : null
     };
+    
+    // Force update if we have a valid region, otherwise let COALESCE handle it.
+    // If the user wants to purge invalid regions (like 122), we would need to change playerModel logic
+    // or pass a flag. For now, we rely on finding a valid region to overwrite the bad one.
+    
     const updated = playerModel.updatePlayerOpenDota(steam_id, nuevaInfo);
     return updated;
   } catch (e) {
