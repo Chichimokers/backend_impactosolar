@@ -47,7 +47,7 @@ export default function DotaTable() {
 
   useEffect(() => {
     setLoading(true);
-    fetch('https://esaki-jrr.com/apidota/dota-info')
+    fetch('https://inventory.cloudns.be/apidota/dota-info')
       .then(res => res.json())
       .then(data => {
         setPlayers(data.results || []);
@@ -134,14 +134,14 @@ export default function DotaTable() {
                             {isValidMedal ? (
                               <>
                                 <Image
-                                  src={`https://esaki-jrr.com/ranking/medals/medal_${medal}.png`}
+                                  src={`https://inventory.cloudns.be/ranking/medals/medal_${medal}.png`}
                                   alt="base medal"
                                   fill
                                   className="object-contain"
                                 />
                                 {isValidStar && (
                                   <Image
-                                    src={`https://esaki-jrr.com/ranking/medals/star_${stars}.png`}
+                                    src={`https://inventory.cloudns.be/ranking/medals/star_${stars}.png`}
                                     alt="stars"
                                     fill
                                     className="object-contain"

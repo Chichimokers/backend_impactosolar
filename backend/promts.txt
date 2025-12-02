@@ -1,0 +1,55 @@
+Vamo lo siguiente haz esto mas componentisado por favor y enotnces necesito lo siguiente
+1-necesito que componentesises todo bien par que sea modular
+2-necesito el manejo de la bd perfecto
+3-necesito que los users se le updatee la info cada cierto tiempo ejempolo cada 1H una tarea periodica no que cada vez que se haga get se haga actualiuacion
+4-necesto un endpoint de auth  para los users admin
+5-necesito proteger el endpouint de añadir nuevos players sea protegido por autH
+6-para el auh generar el jwt para protger pon un user fijo admin 123 
+
+7-Necesiot que haas un endpoint en el cual se pasa un excel que cargara ide de los players sea el excel que sea solo cojeras la columna ID  que sera el id de steam que se carga via excel ,JUGADOR nbombre del player ,campo Dotabuff que sera un link al dotabuff del player entonces necesito que updatees el modelo de player para que coja estas info ,OJO aunque el excel tenga mas campos solo quiero este 
+8-genera un yaml de todos los endpoint,con todo lo que debe deolver el api y lo que hay que mandar para añadir un plauyer  para darselo a mi forntent
+-ultima tarea- hazle un deploy parecido a este peror para correr el app.js este entineds osea as imismo rama master y tal pero que coprrea este proyecto name: Django CI/CD VPS
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Clean all __pycache__
+        run: |
+          sudo find ${{ github.workspace }} -name "__pycache__" -type d -exec rm -rf {} +
+      - name: Checkout code
+        uses: actions/checkout@v3
+    
+      - name: Build and run with Docker Compose
+        run: |
+          docker-compose down
+          docker-compose up --build -d
+      - name: Run makemigrations for all apps
+        run: |
+          docker-compose exec  -T web  python manage.py makemigrations core
+          docker-compose exec  -T web python manage.py makemigrations products
+          docker-compose exec  -T web python manage.py makemigrations sales
+          docker-compose exec  -T web python manage.py makemigrations users
+          docker-compose exec  -T web python manage.py makemigrations history
+
+          docker-compose exec  -T web  python manage.py migrate core
+          docker-compose exec  -T web python manage.py migrate products
+          docker-compose exec  -T web python manage.py migrate sales
+          docker-compose exec  -T web python manage.py migrate users
+          docker-compose exec  -T web python manage.py migrate history
+      - name: Run migrate
+        run: |
+          docker-compose exec -T web python manage.py makemigrations
+          docker-compose exec -T web python manage.py migrate
+
+      - name: Run migrate_all_tenants
+        run: |
+          docker-compose exec -T web python manage.py migrate_all_tenants
+
+
+
