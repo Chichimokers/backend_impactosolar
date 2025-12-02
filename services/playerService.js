@@ -45,12 +45,13 @@ const calculateEstimatedMMR = (rank_tier, leaderboard_rank) => {
     if (!leaderboard_rank) return 5620;
     
     // Estimate based on leaderboard rank
-    // Segment 1: Rank 1-1000 (13000 -> 8000) -> ~5 MMR per rank
-    // Segment 2: Rank 1001-5000 (8000 -> 5620) -> ~0.6 MMR per rank
+    // Adjusted: Rank 3551 is approx 9500 MMR
+    // Segment 1: Rank 1-1000 (13500 -> 11000) -> ~2.5 MMR per rank
+    // Segment 2: Rank 1001+ (11000 -> ...) -> ~0.6 MMR per rank
     if (leaderboard_rank <= 1000) {
-      return 13000 - (leaderboard_rank * 5);
+      return Math.floor(13500 - (leaderboard_rank * 2.5));
     } else {
-      return Math.floor(8000 - ((leaderboard_rank - 1000) * 0.6));
+      return Math.floor(11000 - ((leaderboard_rank - 1000) * 0.6));
     }
   }
 
@@ -61,8 +62,14 @@ const updatePlayerFromOpenDota = async (steam_id) => {
   const accountId = accountIdFromSteamId(steam_id);
   if (!accountId) return null;
   try {
-    const response = await axios.get(`https://api.opendota.com/api/players/${accountId}`);
-    const data = response.data;
+    // Fetch Profile & Recent Matches in parallel
+    const [profileRes, matchesRes] = await Promise.all([
+      axios.get(`https://api.opendota.com/api/players/${accountId}`),
+      axios.get(`https://api.opendota.com/api/players/${accountId}/recentMatches`)
+    ]);
+
+    const data = profileRes.data;
+    const matches = matchesRes.data || [];
     
     // Calculate MMR
     let mmr = data.mmr_estimate?.estimate;
@@ -71,15 +78,76 @@ const updatePlayerFromOpenDota = async (steam_id) => {
       mmr = calculatedMMR;
     }
 
+    // Calculate Stats from Recent Matches
+    let recent_win_rate = null;
+    let recent_kda = null;
+    let recent_gpm = null;
+    let recent_xpm = null;
+    let most_played_hero_id = null;
+    let region_cluster = null;
+
+    if (matches.length > 0) {
+      let wins = 0;
+      let totalKills = 0;
+      let totalDeaths = 0;
+      let totalAssists = 0;
+      let totalGpm = 0;
+      let totalXpm = 0;
+      const heroCounts = {};
+      const clusterCounts = {};
+
+      matches.forEach(m => {
+        // Win calculation
+        const isRadiant = m.player_slot < 128;
+        if ((isRadiant && m.radiant_win) || (!isRadiant && !m.radiant_win)) {
+          wins++;
+        }
+
+        // KDA sums
+        totalKills += m.kills;
+        totalDeaths += m.deaths;
+        totalAssists += m.assists;
+
+        // GPM/XPM sums
+        totalGpm += m.gold_per_min;
+        totalXpm += m.xp_per_min;
+
+        // Hero frequency
+        heroCounts[m.hero_id] = (heroCounts[m.hero_id] || 0) + 1;
+
+        // Cluster frequency
+        clusterCounts[m.cluster] = (clusterCounts[m.cluster] || 0) + 1;
+      });
+
+      recent_win_rate = (wins / matches.length) * 100;
+      recent_kda = totalDeaths === 0 ? (totalKills + totalAssists) : ((totalKills + totalAssists) / totalDeaths);
+      recent_gpm = Math.round(totalGpm / matches.length);
+      recent_xpm = Math.round(totalXpm / matches.length);
+
+      // Find most played hero
+      most_played_hero_id = Object.keys(heroCounts).reduce((a, b) => heroCounts[a] > heroCounts[b] ? a : b);
+      
+      // Find most frequent cluster (region)
+      region_cluster = Object.keys(clusterCounts).reduce((a, b) => clusterCounts[a] > clusterCounts[b] ? a : b);
+    }
+
     const nuevaInfo = {
       mmr_estimate: mmr,
       rank_tier: data.rank_tier ?? null,
+      rank_leaderboard: data.leaderboard_rank ?? null,
       profile: data.profile?.personaname ?? null,
       avatar: data.profile?.avatarfull ?? null,
+      recent_win_rate: recent_win_rate ? parseFloat(recent_win_rate.toFixed(2)) : null,
+      recent_kda: recent_kda ? parseFloat(recent_kda.toFixed(2)) : null,
+      recent_gpm,
+      recent_xpm,
+      most_played_hero_id: most_played_hero_id ? parseInt(most_played_hero_id) : null,
+      region_cluster: region_cluster ? parseInt(region_cluster) : null
     };
     const updated = playerModel.updatePlayerOpenDota(steam_id, nuevaInfo);
     return updated;
   } catch (e) {
+    console.error(e);
     return { steam_id, error: 'No se pudo obtener info de OpenDota' };
   }
 };
@@ -123,7 +191,7 @@ const updateAllPlayersFromOpenDota = async () => {
 
       // Delay to respect rate limits (OpenDota free tier ~60/min)
       // 1500ms = ~40 req/min (safe)
-      await delay(10000);
+      await delay(700);
     }
     syncState.running = false;
     websocketService.broadcastAdmin({ type: 'SYNC_COMPLETE', data: syncState });
