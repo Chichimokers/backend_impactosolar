@@ -14,4 +14,7 @@ router.post('/', requireAuth, playerController.addPlayer);
 // Protected: import via Excel
 router.post('/import', requireAuth, upload.single('file'), playerController.importExcel);
 
+// Protected: trigger OpenDota sync manually
+router.post('/sync', requireAuth, playerController.syncOpenDota);
+
 module.exports = router;

@@ -1,5 +1,6 @@
 const playerModel = require('../models/playerModel');
 const excelService = require('../services/excelService');
+const playerService = require('../services/playerService');
 
 const addPlayer = (req, res) => {
   const { steam_id, name, dotabuff } = req.body;
@@ -37,4 +38,16 @@ const listPlayers = (req, res) => {
   res.json({ count: players.length, players });
 };
 
-module.exports = { addPlayer, importExcel, listPlayers };
+const syncOpenDota = async (req, res) => {
+  try {
+    // Trigger update in background or await? 
+    // If many players, await might timeout. Let's await for now assuming < 100 players.
+    const results = await playerService.updateAllPlayersFromOpenDota();
+    res.json({ message: 'Sincronización completada', results });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error sincronizando con OpenDota' });
+  }
+};
+
+module.exports = { addPlayer, importExcel, listPlayers, syncOpenDota };
