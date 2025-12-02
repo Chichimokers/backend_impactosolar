@@ -4,6 +4,31 @@ const websocketService = require('./websocketService');
 
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
+const REGION_NAMES = {
+  1: "US WEST",
+  2: "US EAST",
+  3: "EUROPE",
+  5: "SINGAPORE",
+  6: "DUBAI",
+  7: "AUSTRALIA",
+  8: "STOCKHOLM",
+  9: "AUSTRIA",
+  10: "BRAZIL",
+  11: "SOUTHAFRICA",
+  12: "PW TELECOM SHANGHAI",
+  13: "PW UNICOM",
+  14: "CHILE",
+  15: "PERU",
+  16: "INDIA",
+  17: "PW TELECOM GUANGDONG",
+  18: "PW TELECOM ZHEJIANG",
+  19: "JAPAN",
+  20: "PW TELECOM WUHAN",
+  25: "PW UNICOM TIANJIN",
+  37: "TAIWAN",
+  38: "ARGENTINA"
+};
+
 const accountIdFromSteamId = (steam_id) => {
   const idStr = String(steam_id);
   // Si es corto (menos de 16 caracteres), asumimos que ya es un Account ID (32-bit)
@@ -133,7 +158,8 @@ const updatePlayerFromOpenDota = async (steam_id) => {
         try {
           const matchDetail = await axios.get(`https://api.opendota.com/api/matches/${m.match_id}`);
           const region = matchDetail.data?.region;
-          if (region !== undefined) {
+          // Validate that it is a known region (and not a cluster ID or garbage)
+          if (region !== undefined && REGION_NAMES[region]) {
             regionCounts[region] = (regionCounts[region] || 0) + 1;
           }
           // Small delay to avoid bursting too hard
