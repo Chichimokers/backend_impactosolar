@@ -71,7 +71,7 @@ const updateAllPlayersFromOpenDota = async () => {
 
       // Delay to respect rate limits (OpenDota free tier ~60/min)
       // 1500ms = ~40 req/min (safe)
-      await delay(1500);
+      await delay(10000);
     }
     syncState.running = false;
     websocketService.broadcastAdmin({ type: 'SYNC_COMPLETE', data: syncState });
