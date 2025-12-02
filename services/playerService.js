@@ -63,9 +63,10 @@ const updatePlayerFromOpenDota = async (steam_id) => {
   if (!accountId) return null;
   try {
     // Fetch Profile & Recent Matches in parallel
+    // Use catch on matches to allow partial updates if matches fail
     const [profileRes, matchesRes] = await Promise.all([
       axios.get(`https://api.opendota.com/api/players/${accountId}`),
-      axios.get(`https://api.opendota.com/api/players/${accountId}/recentMatches`)
+      axios.get(`https://api.opendota.com/api/players/${accountId}/recentMatches`).catch(() => ({ data: [] }))
     ]);
 
     const data = profileRes.data;
@@ -94,7 +95,6 @@ const updatePlayerFromOpenDota = async (steam_id) => {
       let totalGpm = 0;
       let totalXpm = 0;
       const heroCounts = {};
-      const clusterCounts = {};
 
       matches.forEach(m => {
         // Win calculation
@@ -114,9 +114,6 @@ const updatePlayerFromOpenDota = async (steam_id) => {
 
         // Hero frequency
         heroCounts[m.hero_id] = (heroCounts[m.hero_id] || 0) + 1;
-
-        // Cluster frequency
-        clusterCounts[m.cluster] = (clusterCounts[m.cluster] || 0) + 1;
       });
 
       recent_win_rate = (wins / matches.length) * 100;
@@ -127,8 +124,28 @@ const updatePlayerFromOpenDota = async (steam_id) => {
       // Find most played hero
       most_played_hero_id = Object.keys(heroCounts).reduce((a, b) => heroCounts[a] > heroCounts[b] ? a : b);
       
-      // Find most frequent cluster (region)
-      region_cluster = Object.keys(clusterCounts).reduce((a, b) => clusterCounts[a] > clusterCounts[b] ? a : b);
+      // Determine Region from recent matches (fetch details for top 3)
+      const regionCounts = {};
+      // Take up to 3 recent matches to check region
+      const matchesToFetch = matches.slice(0, 3);
+      
+      for (const m of matchesToFetch) {
+        try {
+          const matchDetail = await axios.get(`https://api.opendota.com/api/matches/${m.match_id}`);
+          const region = matchDetail.data?.region;
+          if (region !== undefined) {
+            regionCounts[region] = (regionCounts[region] || 0) + 1;
+          }
+          // Small delay to avoid bursting too hard
+          await delay(300);
+        } catch (err) {
+          console.error(`Error fetching match ${m.match_id}:`, err.message);
+        }
+      }
+
+      if (Object.keys(regionCounts).length > 0) {
+        region_cluster = Object.keys(regionCounts).reduce((a, b) => regionCounts[a] > regionCounts[b] ? a : b);
+      }
     }
 
     const nuevaInfo = {
@@ -190,8 +207,9 @@ const updateAllPlayersFromOpenDota = async () => {
       websocketService.broadcastAdmin({ type: 'SYNC_PROGRESS', data: syncState });
 
       // Delay to respect rate limits (OpenDota free tier ~60/min)
-      // 1500ms = ~40 req/min (safe)
-      await delay(700);
+      // We make multiple requests per player now (profile + recentMatches + ~3 matches)
+      // ~5 requests per player -> 12 players/min -> 5000ms delay
+      await delay(5000);
     }
     syncState.running = false;
     websocketService.broadcastAdmin({ type: 'SYNC_COMPLETE', data: syncState });
