@@ -88,13 +88,19 @@ const updatePlayerFromOpenDota = async (steam_id) => {
   if (!accountId) return null;
   try {
     // Fetch Profile & Recent Matches in parallel
-    // Use catch on matches to allow partial updates if matches fail
+    // Use catch on BOTH to allow partial updates or just keeping old data
     const [profileRes, matchesRes] = await Promise.all([
-      axios.get(`https://api.opendota.com/api/players/${accountId}`),
-      axios.get(`https://api.opendota.com/api/players/${accountId}/recentMatches`).catch(() => ({ data: [] }))
+      axios.get(`https://api.opendota.com/api/players/${accountId}`).catch(e => {
+        console.error(`Error fetching profile for ${steam_id}:`, e.message);
+        return { data: {} };
+      }),
+      axios.get(`https://api.opendota.com/api/players/${accountId}/recentMatches`).catch(e => {
+        console.error(`Error fetching matches for ${steam_id}:`, e.message);
+        return { data: [] };
+      })
     ]);
 
-    const data = profileRes.data;
+    const data = profileRes.data || {};
     const matches = matchesRes.data || [];
     
     // Calculate MMR
