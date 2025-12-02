@@ -5,6 +5,14 @@ const dotenv = require('dotenv');
 const envFile = process.env.NODE_ENV === 'production' ? '.env.prod' : '.env.local';
 dotenv.config({ path: path.resolve(__dirname, envFile) });
 
+console.log('--------------------------------------------------');
+console.log(`[DEBUG] Cargando configuración desde: ${envFile}`);
+console.log(`[DEBUG] NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`[DEBUG] PORT: ${process.env.PORT}`);
+console.log(`[DEBUG] FRONTEND_URL: ${process.env.FRONTEND_URL}`);
+console.log(`[DEBUG] DB_PATH: ${process.env.DB_PATH}`);
+console.log('--------------------------------------------------');
+
 const express = require('express');
 const cors = require('cors');
 const session = require('express-session');
@@ -18,7 +26,7 @@ const app = express();
 const PORT = process.env.PORT || 5500;
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin:'*',
   credentials: true
 }));
 app.use(express.json());
