@@ -2,7 +2,13 @@ const XLSX = require('xlsx');
 
 const parseExcelBuffer = (buffer) => {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
-  const sheetName = workbook.SheetNames[0];
+  
+  // Try to find 'Leaderboard' sheet, otherwise use the first one
+  let sheetName = workbook.SheetNames.find(name => name.toLowerCase() === 'leaderboard');
+  if (!sheetName) {
+    sheetName = workbook.SheetNames[0];
+  }
+  
   const sheet = workbook.Sheets[sheetName];
   const json = XLSX.utils.sheet_to_json(sheet, { defval: null });
   // Normalize keys to try to find ID, JUGADOR, Dotabuff
