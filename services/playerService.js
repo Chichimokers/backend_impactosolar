@@ -1,5 +1,6 @@
 const axios = require('axios');
 const playerModel = require('../models/playerModel');
+const websocketService = require('./websocketService');
 
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
@@ -31,15 +32,52 @@ const updatePlayerFromOpenDota = async (steam_id) => {
   }
 };
 
-const updateAllPlayersFromOpenDota = async () => {
-  const players = playerModel.getAllPlayers();
-  const results = [];
-  for (const p of players) {
-    const r = await updatePlayerFromOpenDota(p.steam_id);
-    results.push(r);
-    await delay(1000);
-  }
-  return results;
+let syncState = {
+  running: false,
+  total: 0,
+  processed: 0,
+  errors: 0,
+  lastRun: null
 };
 
-module.exports = { updateAllPlayersFromOpenDota, updatePlayerFromOpenDota };
+const getSyncState = () => syncState;
+
+const updateAllPlayersFromOpenDota = async () => {
+  if (syncState.running) return; // Prevent concurrent runs
+
+  const players = playerModel.getAllPlayers();
+  syncState = {
+    running: true,
+    total: players.length,
+    processed: 0,
+    errors: 0,
+    lastRun: new Date()
+  };
+
+  // Run in background (do not await this function call in controller)
+  (async () => {
+    for (const p of players) {
+      try {
+        const result = await updatePlayerFromOpenDota(p.steam_id);
+        // Emit individual player update
+        websocketService.broadcast({ type: 'PLAYER_UPDATE', data: result });
+      } catch (e) {
+        syncState.errors++;
+      }
+      syncState.processed++;
+      
+      // Emit progress update
+      websocketService.broadcast({ type: 'SYNC_PROGRESS', data: syncState });
+
+      // Delay to respect rate limits (OpenDota free tier ~60/min)
+      // 1500ms = ~40 req/min (safe)
+      await delay(1500);
+    }
+    syncState.running = false;
+    websocketService.broadcast({ type: 'SYNC_COMPLETE', data: syncState });
+  })();
+
+  return syncState;
+};
+
+module.exports = { updateAllPlayersFromOpenDota, updatePlayerFromOpenDota, getSyncState };

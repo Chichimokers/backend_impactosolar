@@ -13,6 +13,7 @@
     "node-cron": "^3.0.2",
     "passport": "^0.7.0",
     "passport-steam": "^1.0.18",
+    "ws": "^8.18.3",
     "xlsx": "^0.18.5"
   },
   "scripts": {

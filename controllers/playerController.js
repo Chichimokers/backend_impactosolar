@@ -40,14 +40,21 @@ const listPlayers = (req, res) => {
 
 const syncOpenDota = async (req, res) => {
   try {
-    // Trigger update in background or await? 
-    // If many players, await might timeout. Let's await for now assuming < 100 players.
-    const results = await playerService.updateAllPlayersFromOpenDota();
-    res.json({ message: 'Sincronización completada', results });
+    const state = playerService.getSyncState();
+    if (state.running) {
+      return res.json({ message: 'Sincronización ya en curso', state });
+    }
+    // Start background sync
+    playerService.updateAllPlayersFromOpenDota();
+    res.json({ message: 'Sincronización iniciada en segundo plano', state: playerService.getSyncState() });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: 'Error sincronizando con OpenDota' });
+    res.status(500).json({ error: 'Error iniciando sincronización' });
   }
 };
 
-module.exports = { addPlayer, importExcel, listPlayers, syncOpenDota };
+const getSyncStatus = (req, res) => {
+  res.json(playerService.getSyncState());
+};
+
+module.exports = { addPlayer, importExcel, listPlayers, syncOpenDota, getSyncStatus };

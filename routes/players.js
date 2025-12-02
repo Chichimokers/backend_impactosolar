@@ -17,4 +17,7 @@ router.post('/import', requireAuth, upload.single('file'), playerController.impo
 // Protected: trigger OpenDota sync manually
 router.post('/sync', requireAuth, playerController.syncOpenDota);
 
+// Public/Protected: check sync status
+router.get('/sync/status', requireAuth, playerController.getSyncStatus);
+
 module.exports = router;

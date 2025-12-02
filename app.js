@@ -52,6 +52,10 @@ app.get('/dota', (req, res) => {
   res.json({ message: 'DotaRankNExt backend - API running' });
 });
 
-app.listen(PORT, () => {
+const websocketService = require('./services/websocketService');
+
+const server = app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT} (Env: ${process.env.NODE_ENV || 'local'})`);
 });
+
+websocketService.init(server);
