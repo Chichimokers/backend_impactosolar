@@ -43,9 +43,9 @@ const accountIdFromSteamId = (steam_id) => {
   }
 };
 
-const AMERICAS_REGIONS = [1, 2, 10, 14, 15, 38];
+const EUROPE_REGIONS = [3, 8, 9]; // Europe, Stockholm, Austria
 
-const calculateEstimatedMMR = (rank_tier, leaderboard_rank, region_id = null) => {
+const calculateEstimatedMMR = (rank_tier, leaderboard_rank, region_id = null, loccountrycode = null) => {
   if (!rank_tier) return null;
 
   const rank = Math.floor(rank_tier / 10); // 1 to 8
@@ -71,27 +71,18 @@ const calculateEstimatedMMR = (rank_tier, leaderboard_rank, region_id = null) =>
     // Base Immortal if no rank
     if (!leaderboard_rank) return 5620;
     
-    const isAmericas = region_id && AMERICAS_REGIONS.includes(parseInt(region_id));
+    // Universal Formula based on Americas data points (Rank 334~8910, Rank 2653~7127)
+    // Linear fit: MMR = 9160 - (Rank * 0.77)
+    let estimatedMMR = 9160 - (leaderboard_rank * 0.77);
 
-    if (isAmericas) {
-      // Americas Formula (Lower MMR for same rank)
-      // Rank 334 ~ 8910 MMR
-      // Rank 1000 ~ 7900 MMR
-      if (leaderboard_rank <= 1000) {
-        return Math.floor(9500 - (leaderboard_rank * 1.6));
-      } else {
-        return Math.floor(7900 - ((leaderboard_rank - 1000) * 0.45));
-      }
-    } else {
-      // Rest of World Formula (Existing)
-      // Segment 1: Rank 1-1000 (13500 -> 11000) -> ~2.5 MMR per rank
-      // Segment 2: Rank 1001+ (11000 -> ...) -> ~0.6 MMR per rank
-      if (leaderboard_rank <= 1000) {
-        return Math.floor(13500 - (leaderboard_rank * 2.5));
-      } else {
-        return Math.floor(11000 - ((leaderboard_rank - 1000) * 0.6));
-      }
+    // Europe Multiplier (x1.9 as requested)
+    const isEurope = region_id && EUROPE_REGIONS.includes(parseInt(region_id));
+    
+    if (isEurope) {
+      estimatedMMR = estimatedMMR * 1.9;
     }
+
+    return Math.floor(estimatedMMR);
   }
 
   return null;
@@ -208,9 +199,9 @@ const updatePlayerFromOpenDota = async (steam_id, current_rank_tier = null) => {
       }
     }
 
-    // Calculate MMR (Now using region_cluster)
+    // Calculate MMR (Now using region_cluster and loccountrycode)
     let mmr = data.mmr_estimate?.estimate;
-    const calculatedMMR = calculateEstimatedMMR(data.rank_tier, data.leaderboard_rank, region_cluster);
+    const calculatedMMR = calculateEstimatedMMR(data.rank_tier, data.leaderboard_rank, region_cluster, data.profile?.loccountrycode);
     if (calculatedMMR) {
       mmr = calculatedMMR;
     }
