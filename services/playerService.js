@@ -43,7 +43,9 @@ const accountIdFromSteamId = (steam_id) => {
   }
 };
 
-const calculateEstimatedMMR = (rank_tier, leaderboard_rank) => {
+const AMERICAS_REGIONS = [1, 2, 10, 14, 15, 38];
+
+const calculateEstimatedMMR = (rank_tier, leaderboard_rank, region_id = null) => {
   if (!rank_tier) return null;
 
   const rank = Math.floor(rank_tier / 10); // 1 to 8
@@ -69,23 +71,47 @@ const calculateEstimatedMMR = (rank_tier, leaderboard_rank) => {
     // Base Immortal if no rank
     if (!leaderboard_rank) return 5620;
     
-    // Estimate based on leaderboard rank
-    // Adjusted: Rank 3551 is approx 9500 MMR
-    // Segment 1: Rank 1-1000 (13500 -> 11000) -> ~2.5 MMR per rank
-    // Segment 2: Rank 1001+ (11000 -> ...) -> ~0.6 MMR per rank
-    if (leaderboard_rank <= 1000) {
-      return Math.floor(13500 - (leaderboard_rank * 2.5));
+    const isAmericas = region_id && AMERICAS_REGIONS.includes(parseInt(region_id));
+
+    if (isAmericas) {
+      // Americas Formula (Lower MMR for same rank)
+      // Rank 334 ~ 8910 MMR
+      // Rank 1000 ~ 7900 MMR
+      if (leaderboard_rank <= 1000) {
+        return Math.floor(9500 - (leaderboard_rank * 1.6));
+      } else {
+        return Math.floor(7900 - ((leaderboard_rank - 1000) * 0.45));
+      }
     } else {
-      return Math.floor(11000 - ((leaderboard_rank - 1000) * 0.6));
+      // Rest of World Formula (Existing)
+      // Segment 1: Rank 1-1000 (13500 -> 11000) -> ~2.5 MMR per rank
+      // Segment 2: Rank 1001+ (11000 -> ...) -> ~0.6 MMR per rank
+      if (leaderboard_rank <= 1000) {
+        return Math.floor(13500 - (leaderboard_rank * 2.5));
+      } else {
+        return Math.floor(11000 - ((leaderboard_rank - 1000) * 0.6));
+      }
     }
   }
 
   return null;
 };
 
-const updatePlayerFromOpenDota = async (steam_id) => {
+const updatePlayerFromOpenDota = async (steam_id, current_rank_tier = null) => {
   const accountId = accountIdFromSteamId(steam_id);
   if (!accountId) return null;
+
+  // Refresh data if player is Immortal (>=80) or has no rank
+  if (!current_rank_tier || current_rank_tier >= 80) {
+    try {
+      await axios.post(`https://api.opendota.com/api/players/${accountId}/refresh`);
+      console.log("Refreshed data for", steam_id);
+      await delay(1500); // Wait 2s after refresh
+    } catch (e) {
+      console.error(`Error refreshing ${steam_id}:`, e.message);
+    }
+  }
+
   try {
     // Fetch Profile & Recent Matches sequentially to avoid rate limits
     let profileRes = { data: {} };
@@ -110,13 +136,6 @@ const updatePlayerFromOpenDota = async (steam_id) => {
     const data = profileRes.data || {};
     const matches = matchesRes.data || [];
     
-    // Calculate MMR
-    let mmr = data.mmr_estimate?.estimate;
-    const calculatedMMR = calculateEstimatedMMR(data.rank_tier, data.leaderboard_rank);
-    if (calculatedMMR) {
-      mmr = calculatedMMR;
-    }
-
     // Calculate Stats from Recent Matches
     let recent_win_rate = null;
     let recent_kda = null;
@@ -189,6 +208,13 @@ const updatePlayerFromOpenDota = async (steam_id) => {
       }
     }
 
+    // Calculate MMR (Now using region_cluster)
+    let mmr = data.mmr_estimate?.estimate;
+    const calculatedMMR = calculateEstimatedMMR(data.rank_tier, data.leaderboard_rank, region_cluster);
+    if (calculatedMMR) {
+      mmr = calculatedMMR;
+    }
+
     // If we have a valid region_cluster, we use it.
     // If we don't (it's null), we might want to keep the old one OR clear it if it's invalid.
     // But playerModel uses COALESCE, so nulls are ignored.
@@ -249,7 +275,7 @@ const updateAllPlayersFromOpenDota = async () => {
   (async () => {
     for (const p of players) {
       try {
-        const result = await updatePlayerFromOpenDota(p.steam_id);
+        const result = await updatePlayerFromOpenDota(p.steam_id, p.rank_tier);
         
         if (result && result.error === 'RATE_LIMIT') {
           console.warn(`Rate limit hit for ${p.steam_id}. Pausing for 60s...`);
@@ -269,9 +295,9 @@ const updateAllPlayersFromOpenDota = async () => {
 
       // Delay to respect rate limits (OpenDota free tier ~60/min)
       // We make multiple requests per player now (profile + recentMatches + ~3 matches)
-      // ~5 requests per player -> 12 players/min -> 5000ms delay
-      // Increased to 6000ms to be safe
-      await delay(6000);
+      // ~6 requests per player. With 10s delay + execution time (~8s), we do ~3 players/min
+      // ~18 requests/min, well below the 60/min limit.
+      await delay(10000);
     }
     syncState.running = false;
     websocketService.broadcastAdmin({ type: 'SYNC_COMPLETE', data: syncState });

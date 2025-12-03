@@ -1,8 +1,8 @@
 const cron = require('node-cron');
 const playerService = require('./services/playerService');
 
-// Run at minute 0 every hour
-cron.schedule('0 * * * *', async () => {
+// Run every 8 hours to respect OpenDota free tier limits (3000 calls/day)
+cron.schedule('0 */8 * * *', async () => {
   console.log('Scheduler: actualizando players desde OpenDota...');
   try {
     const res = await playerService.updateAllPlayersFromOpenDota();
